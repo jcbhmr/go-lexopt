@@ -17,50 +17,52 @@ import (
 	. "github.com/jcbhmr/go-lexopt/prelude"
 )
 
-const Help = "cargo [+toolchain] [OPTIONS] [SUBCOMMAND]"
-
-func init() {
-	os.Args = []string{"cargo", "+nightly", "--verbose", "--color=never", "install", "hello", "--root", "/home/octocat/project1", "--jobs", "8"}
-}
+const help = "cargo [+toolchain] [OPTIONS] [SUBCOMMAND]"
 
 func Example_cargo() {
+	os.Args = []string{"cargo", "+nightly", "--verbose", "--color=never", "install", "hello", "--root", "/home/octocat/project1", "--jobs", "8"}
+
+	log.SetFlags(0)
+
 	settings := globalSettings{
 		toolchain: "stable",
-		color: ColorAuto,
-		offline: false,
-		quiet: false,
-		verbose: false,
+		color:     colorAuto,
+		offline:   false,
+		quiet:     false,
+		verbose:   false,
 	}
 
 	parser := lexopt.ParserFromEnv()
 	for {
 		arg, ok, err := parser.Next()
+		fmt.Printf("parser=%#+v, arg=%#+v, ok=%#+v, err=%#+v\n", parser, arg, ok, err)
 		if err != nil {
 			log.Fatal(err)
 		}
 		if !ok {
 			break
 		}
-		if (arg == Long{"color"}) {
+		if argV, ok := arg.(Long); ok && argV.A == "color" {
 			colorText, err := parser.Value()
 			if err != nil {
 				log.Fatal(err)
 			}
-			color, err2 := ColorFromStr(colorText)
+			color, err2 := colorFromStr(colorText)
 			if err2 != "" {
-				log.Fatal(&lexopt.ErrorCustom{errors.New(err2)})
+				err = &lexopt.ErrorCustom{errors.New(err2)}
+				log.Fatal(err)
 			}
 			settings.color = color
-		} else if (arg == Long{"offline"}) {
+		} else if argV, ok := arg.(Long); ok && argV.A == "offline" {
 			settings.offline = true
-		} else if (arg == Long{"quiet"}) {
+		} else if argV, ok := arg.(Long); ok && argV.A == "quiet" {
 			settings.quiet = true
 			settings.verbose = false
-		} else if (arg == Long{"verbose"}) {
+		} else if argV, ok := arg.(Long); ok && argV.A == "verbose" {
 			settings.quiet = false
 			settings.verbose = true
-		} else if (arg == Long{"help"}) {
-			fmt.Println(Help)
+		} else if argV, ok := arg.(Long); ok && argV.A == "help" {
+			fmt.Println(help)
 			os.Exit(0)
 		} else if value, ok := arg.(Value); ok {
 			if strings.HasPrefix(value.A, "+") {
@@ -79,7 +81,7 @@ func Example_cargo() {
 		}
 	}
 
-	fmt.Println(Help)
+	fmt.Println(help)
 
 	// Output:
 	// Settings: lexopt_test.globalSettings{toolchain:"nightly", color:0, offline:false, quiet:false, verbose:true}
@@ -88,13 +90,13 @@ func Example_cargo() {
 
 type globalSettings struct {
 	toolchain string
-	color Color
-	offline bool
-	quiet bool
-	verbose bool
+	color     color
+	offline   bool
+	quiet     bool
+	verbose   bool
 }
 
-func install(settings globalSettings, parser lexopt.Parser) lexopt.Error {
+func install(settings globalSettings, parser *lexopt.Parser) lexopt.Error {
 	var package_ *string = nil
 	var root *string = nil
 	var jobs uint16 = getNoOfCPUs()
@@ -107,6 +109,8 @@ func install(settings globalSettings, parser lexopt.Parser) lexopt.Error {
 		if !ok {
 			break
 		}
+		argShort, argShortOk := arg.(Short)
+		argLong, argLongOk := arg.(Long)
 		if value, ok := arg.(Value); package_ == nil && ok {
 			package_ = &value.A
 		} else if (arg == Long{"root"}) {
@@ -115,17 +119,17 @@ func install(settings globalSettings, parser lexopt.Parser) lexopt.Error {
 				return err
 			}
 			root = &rootText
-		} else if (arg == Short{'j'}) || (arg == Long{"jobs"}) {
+		} else if (argShortOk && argShort.A == 'j') || (argLongOk && argLong.A == "jobs") {
 			jobsText, err := parser.Value()
 			if err != nil {
 				return err
 			}
-			jobs64, err := strconv.ParseUint(jobsText, 10, 16)
-			if err != nil {
-				return &lexopt.ErrorCustom{err}
+			jobs64, err2 := strconv.ParseUint(jobsText, 10, 16)
+			if err2 != nil {
+				return &lexopt.ErrorCustom{err2}
 			}
 			jobs = uint16(jobs64)
-		} else if (arg == Long{"help"}) {
+		} else if argV, ok := arg.(Long); ok && argV.A == "help" {
 			fmt.Println("cargo install [OPTIONS] CRATE")
 			os.Exit(0)
 		} else {
@@ -142,21 +146,22 @@ func install(settings globalSettings, parser lexopt.Parser) lexopt.Error {
 	return nil
 }
 
-type Color uint8
+type color uint8
+
 const (
-	ColorAuto Color = iota
-	ColorAlways
-	ColorNever
+	colorAuto color = iota
+	colorAlways
+	colorNever
 )
 
-func ColorFromStr(s string) (Color, string) {
+func colorFromStr(s string) (color, string) {
 	switch strings.ToLower(s) {
 	case "auto":
-		return ColorAuto, ""
+		return colorAuto, ""
 	case "always":
-		return ColorAlways, ""
+		return colorAlways, ""
 	case "never":
-		return ColorNever, ""
+		return colorNever, ""
 	default:
 		return 0, fmt.Sprintf("Invalid style '%v' [pick from: auto, always, never]", s)
 	}

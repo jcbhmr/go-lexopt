@@ -36,15 +36,16 @@ func parseArgs() (args, error) {
 			if err != nil {
 				return args{}, err
 			}
-			number64, err := strconv.ParseUint(numberText, 10, 32)
-			if err != nil {
-				return args{}, err
+			number64, err2 := strconv.ParseUint(numberText, 10, 32)
+			if err2 != nil {
+				return args{}, err2
 			}
 			number = uint32(number64)
 		} else if (arg == Long{"shout"}) {
 			shout = true
 		} else if val, ok := arg.(Value); thing == nil && ok {
-			thing = &val.A
+			v := val.A
+			thing = &v
 		} else if (arg == Long{"help"}) {
 			fmt.Println("Usage: hello [-n|--number=NUM] [--shout] THING")
 			os.Exit(0)
@@ -57,17 +58,17 @@ func parseArgs() (args, error) {
 		return args{}, errors.New("missing argument THING")
 	}
 	return args{
-		thing: *thing,
+		thing:  *thing,
 		number: number,
-		shout: shout,
+		shout:  shout,
 	}, nil
 }
 
-func init() {
-	os.Args = []string{"hello", "--number=3", "--shout", "Alan Turing"}
-}
-
 func Example_hello() {
+	os.Args = []string{"hello", "--number=3", "--shout", "Alan Turing"}
+
+	log.SetFlags(0)
+
 	args, err := parseArgs()
 	if err != nil {
 		log.Fatal(err)
@@ -79,7 +80,7 @@ func Example_hello() {
 	for i := uint32(0); i < args.number; i++ {
 		fmt.Println(message)
 	}
-	
+
 	// Output:
 	// HELLO ALAN TURING!
 }

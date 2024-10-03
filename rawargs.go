@@ -3,36 +3,47 @@ package lexopt
 import "iter"
 
 type RawArgs struct {
-	slice []string
-	index int
+	a *struct {slice []string; index int}
 }
 
-func (a RawArgs) Iter() iter.Seq[string] {
-	return func(yield func(string) bool) {
-		for i := a.index; i < len(a.slice); i++ {
-			if !yield(a.slice[i]) {
-				return
-			}
+var _ iter.Seq[string] = (*RawArgs)(nil).All
+
+func (r *RawArgs) Next() (string, bool) {
+	if len(r.a.slice) - r.a.index == 0 {
+		return "", false
+	}
+	v := r.a.slice[r.a.index]
+	r.a.index++
+	return v, true
+}
+
+func (r *RawArgs) All(yield func(string) bool) {
+	for {
+		value, ok := r.Next()
+		if !ok {
+			break
+		}
+		if !yield(value) {
+			break
 		}
 	}
 }
 
-func (a RawArgs) Peek() (string, bool) {
-	if a.index < len(a.slice) {
-		return a.slice[a.index], true
+func (r *RawArgs) Peek() (string, bool) {
+	if len(r.a.slice) - r.a.index == 0 {
+		return "", false
 	}
-	return "", false
+	return r.a.slice[r.a.index], true
 }
 
-func (a RawArgs) NextIf(f func(string) bool) (string, bool) {
-	v, ok := a.Peek()
-	if ok && f(v) {
-		a.index++
-		return v, true
+func (r *RawArgs) NextIf(func_ func (string) bool) (string, bool) {
+	if arg, ok := r.Peek(); ok && func_(arg) {
+		return r.Next()
+	} else {
+		return "", false
 	}
-	return "", false
 }
 
-func (a RawArgs) AsSlice() []string {
-	return a.slice[a.index:]
+func (r *RawArgs) AsSlice() []string {
+	return append(r.a.slice[:0:0], r.a.slice[r.a.index:]...)
 }

@@ -2,40 +2,41 @@ package lexopt
 
 import "iter"
 
-type ValuesIter iter.Seq[string]
+type ValuesIter struct {
+	tookFirst bool
+	parser    *Parser
+}
 
-func newValuesIter(tookFirst bool, parser *Parser) ValuesIter {
-	return func(yield func(string) bool) {
-		for {
-			if parser == nil {
-				return
-			}
-			if tookFirst {
-				v, ok := parser.nextIfNormal()
-				if !ok {
-					return
-				}
-				if !yield(v) {
-					return
-				}
-			} else if value, hadEqSign, ok := parser.rawOptionalValue(); ok {
-				if hadEqSign {
-					parser = nil
-				}
-				tookFirst = true
-				if !yield(value) {
-					return
-				}
-			} else {
-				value, ok := parser.nextIfNormal()
-				if !ok {
-					panic("ValuesIter must yield at least one value")
-				}
-				tookFirst = true
-				if !yield(value) {
-					return
-				}
-			}
+var _ iter.Seq[string] = (*ValuesIter)(nil).All
+
+func (v *ValuesIter) Next() (string, bool) {
+	parser := v.parser
+	if v.tookFirst {
+		return parser.nextIfNormal()
+	} else if value, hadEqSign, ok := parser.rawOptionalValue(); ok {
+		if hadEqSign {
+			v.parser = nil
+		}
+		v.tookFirst = true
+		return value, true
+	} else {
+		value, ok = parser.nextIfNormal()
+		if !ok {
+			panic("ValuesIter must yield at least one value")
+		}
+		v.tookFirst = true
+		return value, true
+	}
+}
+
+func (v *ValuesIter) All(yield func(string) bool) {
+	for {
+		value, ok := v.Next()
+		if !ok {
+			break
+		}
+		if !yield(value) {
+			break
 		}
 	}
 }
