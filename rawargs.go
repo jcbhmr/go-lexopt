@@ -1,11 +1,13 @@
 package lexopt
 
+import "iter"
+
 type RawArgs struct {
 	slice []string
 	index int
 }
 
-func (a RawArgs) Iter() iterSeq[string] {
+func (a RawArgs) Iter() iter.Seq[string] {
 	return func(yield func(string) bool) {
 		for i := a.index; i < len(a.slice); i++ {
 			if !yield(a.slice[i]) {

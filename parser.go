@@ -2,50 +2,134 @@ package lexopt
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"iter"
 	"os"
 	"strings"
 	"unicode/utf8"
-
-	"github.com/samber/mo"
 )
 
+// A parser for command line arguments.
 type Parser struct {
-	source      []string
-	sourceIndex int
+	source      iter.Seq[string]
 	state       state
+	// The last option we emitted.
 	lastOption  lastOption
-	binName     mo.Option[string]
+	// The name of the command (argv[0]).
+	binName     *string
 }
 
-type state [1]interface {
+type state interface {
 	isState()
 }
+// Nothing interesting is going on.
 type stateNone struct{}
-type statePendingValue string
+// We have a value left over from --option=value.
+type statePendingValue struct {
+	A string
+}
+// We're in the middle of -abc.
 type stateShorts struct {
 	A []byte
-	B int
+	B uint
 }
+// We saw -- and know no more options are coming.
 type stateFinishedOpts struct{}
+
+var _ state = (*stateNone)(nil)
+var _ state = (*statePendingValue)(nil)
+var _ state = (*stateShorts)(nil)
+var _ state = (*stateFinishedOpts)(nil)
 
 func (stateNone) isState()         {}
 func (statePendingValue) isState() {}
 func (stateShorts) isState()       {}
 func (stateFinishedOpts) isState() {}
 
-type lastOption [1]interface {
+// We use this to keep track of the last emitted option, for error messages when
+// an unexpected value is not found.
+type lastOption interface {
 	isLastOption()
 }
 type lastOptionNone struct{}
-type lastOptionShort rune
-type lastOptionLong string
+type lastOptionShort struct {
+	A rune
+}
+type lastOptionLong struct {
+	A string
+}
+
+var _ lastOption = (*lastOptionNone)(nil)
+var _ lastOption = (*lastOptionShort)(nil)
+var _ lastOption = (*lastOptionLong)(nil)
 
 func (lastOptionNone) isLastOption()  {}
 func (lastOptionShort) isLastOption() {}
 func (lastOptionLong) isLastOption()  {}
 
-func (p *Parser) Next() (Arg, bool, error) {
+// Get the next option or positional argument.
+//
+// A return value of (nil, false, nil) means there are no more arguments.
+//
+// # Errors
+//
+// ErrorUnexpectedValue is returned if the last option had a
+// value that hasn't been consumed, as in --option=value or -o=value.
+//
+// It's possible to continue parsing after this error (but this is rarely useful).
+func (p *Parser) Next() (Arg, bool, Error) {
+	if v1, ok := p.state.(statePendingValue); ok {
+		value := v1.A
+		// Last time we got --long=value, and value hasn't been used.
+		p.state = stateNone{}
+		option, ok := p.formatLastOption()
+		if !ok {
+			panic("Should only have pending value after long option")
+		}
+		return nil, false, &ErrorUnexpectedValue{
+			Option: option,
+			Value: value,
+		}
+	} else if v2, ok := p.state.(stateShorts); ok {
+		arg := v2.A
+		pos := &v2.B
+		// We're somewhere inside a -abc chain. Because we're in .next(),
+		// not .value(), we can assume that the next character is another option.
+		fcValue, fcOk, fcErr := firstCodepoint(arg[*pos:])
+		if fcErr == nil && !fcOk {
+			p.state = stateNone{}
+		} else if *pos > 1 && fcErr == nil && fcOk && fcValue == '=' {
+			// If we find "-=[...]" we interpret is as an option.
+			// If we find "-o=..." then there's an unexpected value.
+			// ('-=' as an option exists, see https://linux.die.net/man/1/a2ps.)
+			// clap always interprets it as a short flag in this case, but
+			// that feels sloppy.
+			option, ok := p.formatLastOption()
+			if !ok {
+				panic("unreachable")
+			}
+			value, ok := p.OptionalValue()
+			if !ok {
+				panic("unreachable")
+			}
+			return nil, false, &ErrorUnexpectedValue{
+				Option: option,
+				Value: value,
+			}
+		} else if fcErr == nil && fcOk {
+			*pos += uint(utf8.RuneLen(fcValue))
+			p.lastOption = lastOptionShort{fcValue}
+			return &ArgShort{fcValue}, true, nil
+		} else if fcErr != nil {
+			// Advancing may allow recovery.
+			// This is a little iffy, there might be more bad unicode next.
+			
+		} else {
+			panic("unreachable")
+		}
+	}
+
 	switch v := p.state[0].(type) {
 	case statePendingValue:
 		value := string(v)
@@ -352,4 +436,16 @@ func ParserFromArgs(args []string) Parser {
 func (p *Parser) setLong(option string) Arg {
 	p.lastOption = lastOption{lastOptionLong(option)}
 	return Arg{ArgLong(option[2:])}
+}
+
+
+func firstCodepoint(bytes []byte) (rune, bool, error) {
+	if len(bytes) > 4 {
+		bytes = bytes[:4]
+	}
+	r, i := utf8.DecodeRune(bytes)
+	if r == utf8.RuneError && i == 0 {
+		return 0, false, errors.New(string(bytes[0]))
+	}
+	return r, true, nil
 }

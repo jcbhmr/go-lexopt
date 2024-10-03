@@ -1,6 +1,8 @@
 package lexopt
 
-type ValuesIter iterSeq[string]
+import "iter"
+
+type ValuesIter iter.Seq[string]
 
 func newValuesIter(tookFirst bool, parser *Parser) ValuesIter {
 	return func(yield func(string) bool) {

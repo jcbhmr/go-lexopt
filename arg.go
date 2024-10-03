@@ -1,25 +1,33 @@
 package lexopt
 
-type Arg [1]interface {
+type Arg interface {
 	isArg()
+	Unexpected() Error
 }
-type ArgShort rune
-type ArgLong string
-type ArgValue string
+type ArgShort struct {
+	A rune
+}
+type ArgLong struct {
+	A string
+}
+type ArgValue struct {
+	A string
+}
+
+var _ Arg = (*ArgShort)(nil)
+var _ Arg = (*ArgLong)(nil)
+var _ Arg = (*ArgValue)(nil)
 
 func (ArgShort) isArg() {}
 func (ArgLong) isArg()  {}
 func (ArgValue) isArg() {}
 
-func (a Arg) Unexpected() error {
-	switch a := a[0].(type) {
-	case ArgShort:
-		return Error{ErrorUnexpectedOption(a)}
-	case ArgLong:
-		return Error{ErrorUnexpectedOption(a)}
-	case ArgValue:
-		return Error{ErrorUnexpectedArgument(a)}
-	default:
-		panic("unreachable")
-	}
+func (a ArgShort) Unexpected() Error {
+	return &ErrorUnexpectedOption{string(a.A)}
+}
+func (a ArgLong) Unexpected() Error {
+	return &ErrorUnexpectedOption{a.A}
+}
+func (a ArgValue) Unexpected() Error {
+	return &ErrorUnexpectedArgument{a.A}
 }
