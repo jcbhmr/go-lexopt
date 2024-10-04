@@ -140,7 +140,7 @@ func (p *Parser) Next() (Arg, bool, Error) {
 			panic("unreachable")
 		}
 	} else if _, ok := p.state.(stateFinishedOpts); ok {
-		if len(p.source.slice)-p.source.index > 0 {
+		if p.source.index < len(p.source.slice) {
 			v := p.source.slice[p.source.index]
 			p.source.index++
 			return &ArgValue{v}, true, nil
@@ -159,7 +159,7 @@ func (p *Parser) Next() (Arg, bool, Error) {
 
 	var arg2 string
 	{
-		if len(p.source.slice)-p.source.index > 0 {
+		if p.source.index < len(p.source.slice) {
 			v := p.source.slice[p.source.index]
 			p.source.index++
 			arg2 = v
@@ -211,7 +211,7 @@ func (p *Parser) Value() (string, Error) {
 		return value, nil
 	}
 
-	if len(p.source.slice)-p.source.index > 0 {
+	if p.source.index < len(p.source.slice) {
 		value := p.source.slice[p.source.index]
 		p.source.index++
 		return value, nil
@@ -310,7 +310,7 @@ func (p *Parser) Values() (*ValuesIter, Error) {
 // argument.
 func (p *Parser) nextIfNormal() (string, bool) {
 	if p.nextIsNormal() {
-		if len(p.source.slice)-p.source.index > 0 {
+		if p.source.index < len(p.source.slice) {
 			value := p.source.slice[p.source.index]
 			p.source.index++
 			return value, true
@@ -329,11 +329,11 @@ func (p *Parser) nextIsNormal() bool {
 	}
 	var arg string
 	{
-		if len(p.source.slice)-p.source.index == 0 {
+		if p.source.index < len(p.source.slice) {
+			arg = p.source.slice[p.source.index]
+		} else {
 			// There has to be a next argument.
 			return false
-		} else {
-			arg = p.source.slice[p.source.index]
 		}
 	}
 	if _, ok := p.state.(stateFinishedOpts); ok {
